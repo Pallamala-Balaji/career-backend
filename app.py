@@ -5,7 +5,20 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import NearestNeighbors
 
 app = Flask(__name__)
-CORS(app)
+
+# CORS Fix
+CORS(
+    app,
+    resources={r"/*": {"origins": "*"}},
+    supports_credentials=False
+)
+
+@app.after_request
+def after_request(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
+    return response
 
 # Home Route
 @app.route('/')
@@ -77,7 +90,11 @@ knn = NearestNeighbors(
 
 knn.fit(X)
 
-@app.route('/recommend', methods=['POST'])
+@app.route('/recommend', methods=['OPTIONS'])
+def recommend_options():
+    return '', 200
+
+@app.route('/recommend', methods=['POST', 'OPTIONS'])
 def recommend_career():
     try:
         data = request.get_json()
@@ -143,7 +160,6 @@ def recommend_career():
         return jsonify({
             "error": str(e)
         }), 500
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
