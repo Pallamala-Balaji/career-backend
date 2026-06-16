@@ -9,11 +9,9 @@ app = Flask(__name__)
 # Simple CORS configuration
 CORS(app)
 
-# Home Route
-@app.route('/')
-def home():
-    return "Career Recommendation API is Running!"
-
+@app.route('/test')
+def test():
+    return jsonify({"status": "working"})
 data = {
     "Career": [
         "Frontend Developer",
