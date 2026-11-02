@@ -1,3 +1,4 @@
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
@@ -6,12 +7,15 @@ from sklearn.neighbors import NearestNeighbors
 
 app = Flask(__name__)
 
-# Simple CORS configuration
-CORS(app)
+# CORS Configuration
+CORS(
+    app,
+    resources={r"/recommend": {"origins": "*"}},
+    methods=["POST", "OPTIONS"],
+    allow_headers=["Content-Type"]
+)
 
-@app.route('/test')
-def test():
-    return jsonify({"status": "working"})
+# Career and Skills Dataset
 data = {
     "Career": [
         "Frontend Developer",
@@ -36,6 +40,7 @@ data = {
         "Graphic Designer",
         "Full Stack Developer"
     ],
+
     "Skills": [
         "HTML, CSS, JavaScript, React, Vue, Angular, TypeScript, Responsive Design",
         "Node.js, Express, Database Management, RESTful APIs, Authentication, Docker, Kubernetes",
@@ -61,8 +66,10 @@ data = {
     ]
 }
 
+# Convert dataset into DataFrame
 df = pd.DataFrame(data)
 
+# TF-IDF Vectorization
 vectorizer = TfidfVectorizer(
     tokenizer=lambda x: x.split(', '),
     token_pattern=None
@@ -70,6 +77,7 @@ vectorizer = TfidfVectorizer(
 
 X = vectorizer.fit_transform(df["Skills"])
 
+# KNN Model using Cosine Distance
 knn = NearestNeighbors(
     n_neighbors=1,
     metric='cosine'
@@ -77,10 +85,16 @@ knn = NearestNeighbors(
 
 knn.fit(X)
 
+
+# Career Recommendation API
 @app.route('/recommend', methods=['POST'])
 def recommend_career():
+
     try:
         data = request.get_json()
+
+        if not isinstance(data, dict):
+            return jsonify({"error": "Invalid JSON input."}), 400
 
         user_skills = data.get("skills", [])
 
@@ -89,11 +103,14 @@ def recommend_career():
                 "error": "Invalid input. Expected a list of skills."
             }), 400
 
+        # Normalize user skills
         user_skills = [
             skill.strip().lower()
             for skill in user_skills
+            if isinstance(skill, str) and skill.strip()
         ]
 
+        # Get all known skills
         all_known_skills = set()
 
         for skill_list in df["Skills"]:
@@ -103,47 +120,54 @@ def recommend_career():
             ]
             all_known_skills.update(skills)
 
+        # Validate user skills
         valid_skills = [
-            skill
-            for skill in user_skills
+            skill for skill in user_skills
             if skill in all_known_skills
         ]
 
         if not valid_skills:
             return jsonify({
-                "error": "No matching skills found."
+                "error": "No matching skills found. Please enter valid skills."
             }), 400
 
+        # Convert user skills into TF-IDF vector
         user_vector = vectorizer.transform(
             [", ".join(valid_skills)]
         )
 
+        # Find nearest career using cosine distance
         distances, indices = knn.kneighbors(user_vector)
 
         career_index = indices[0][0]
 
         recommended_career = df.iloc[career_index]["Career"]
 
+        # Identify missing skills
         required_skills = set(
-            df.iloc[career_index]["Skills"]
-            .lower()
-            .split(", ")
+            skill.strip().lower()
+            for skill in df.iloc[career_index]["Skills"].split(",")
         )
 
-        missing_skills = list(
+        missing_skills = sorted(
             required_skills - set(valid_skills)
         )
 
         return jsonify({
             "career": recommended_career,
-            "missing_skills": missing_skills if missing_skills else ["None! You are fully qualified!"]
+            "missing_skills": missing_skills if missing_skills else [
+                "None! You are fully qualified!"
+            ]
         })
 
     except Exception as e:
-        return jsonify({
-            "error": str(e)
-        }), 500
+        return jsonify({"error": str(e)}), 500
 
 
+# Run Flask Application locally
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=False
+    )
